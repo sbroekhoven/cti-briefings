@@ -1,0 +1,127 @@
+# One entry per source. type selects the collector in src/sources/.
+#   id        unique, used in the DB and for --source
+#   enabled   true/false
+#   category  government | vulnerability_db | vendor | news | community | search  (adds category_bonus from settings.yaml)
+#   trust     0..100 how much you trust the source
+#   section   news (default) | vulnerabilities: vulnerability feeds get their own table in the brief
+#             (settings.yaml: vulnerabilities) instead of competing with news for ACT/SIGNAL
+#   options   collector-specific
+# Verify feed URLs on first use with:  uv run python -m src.main --dry-run --source <id>
+
+sources:
+  # --- News (generic RSS collector) -------------------------------------------
+  - {id: bleepingcomputer, type: rss, enabled: true, name: BleepingComputer, category: news, trust: 70,
+     options: {url: "https://www.bleepingcomputer.com/feed/"}}
+  - {id: thehackernews, type: rss, enabled: true, name: The Hacker News, category: news, trust: 60,
+     options: {url: "https://feeds.feedburner.com/TheHackersNews"}}
+  - {id: krebs, type: rss, enabled: true, name: Krebs on Security, category: news, trust: 80,
+     options: {url: "https://krebsonsecurity.com/feed/"}}
+  - {id: securityweek, type: rss, enabled: true, name: SecurityWeek, category: news, trust: 65,
+     options: {url: "https://feeds.feedburner.com/securityweek"}}
+  - {id: therecord, type: rss, enabled: true, name: The Record, category: news, trust: 70,
+     options: {url: "https://therecord.media/feed"}}
+
+  # --- Government / CERT --------------------------------------------------------
+  - {id: cisa_advisories, type: rss, enabled: true, name: CISA Advisories, category: government, trust: 90,
+     options: {url: "https://www.cisa.gov/cybersecurity-advisories/all.xml"}}
+  - {id: cert_eu, type: rss, enabled: true, name: CERT-EU, category: government, trust: 90,
+     options: {url: "https://cert.europa.eu/publications/security-advisories-rss"}}   # verify URL
+
+  # --- Vendor blogs -------------------------------------------------------------
+  - {id: msrc, type: rss, enabled: true, name: Microsoft MSRC, category: vendor, trust: 80, section: vulnerabilities,
+     options: {url: "https://api.msrc.microsoft.com/update-guide/rss"}}
+  - {id: infostealers, type: rss, enabled: true, name: Infostealers.com (Hudson Rock), category: vendor, trust: 60,
+     options: {url: "https://www.infostealers.com/feed/"}}
+  - {id: threatfabric, type: rss, enabled: true, name: ThreatFabric, category: vendor, trust: 75,
+     options: {url: "https://www.threatfabric.com/blogs/rss.xml"}}
+
+  # --- Vulnerability feeds (custom API collectors) --------------------------------
+  - id: enisa_euvd
+    type: enisa_euvd
+    enabled: true
+    name: ENISA EUVD
+    category: vulnerability_db
+    section: vulnerabilities
+    trust: 90
+    options:
+      feeds: [exploited, critical, latest]
+      # query: {fromScore: 8, exploited: true}      # optional extra search
+  - id: cisa_kev
+    type: cisa_kev
+    enabled: true
+    name: CISA KEV
+    category: government
+    section: vulnerabilities
+    trust: 95
+    options: {bonus: 25}
+
+  # --- Search ---------------------------------------------------------------------
+  - id: google_alerts_finance
+    type: google_alerts          # same as rss, but unwraps Google redirect links
+    enabled: false               # create alerts at google.com/alerts, deliver to RSS feed, paste URL
+    name: Google Alerts (finance threats)
+    category: search
+    trust: 40
+    options: {url: "https://www.google.com/alerts/feeds/REPLACE_ME"}
+
+ # --- Brave Search ---------------------------------------------------------------------
+  - id: brave_news
+    type: brave_search           # needs BRAVE_API_KEY in .env
+    enabled: true
+    name: Brave News Search
+    category: search
+    trust: 45
+    options:
+      api_key_env: BRAVE_API_KEY
+      endpoint: news
+      count: 20
+      queries:
+        - "broker cyberattack"
+        - "banking ransomware"
+        - "trading platform data breach"
+
+  # --- HTML scraper example (site without a feed) -----------------------------------
+  - id: example_scraper
+    type: scraper
+    enabled: false
+    name: Example site without RSS
+    category: community
+    trust: 50
+    options:
+      url: "https://example.com/security/news"
+      item_selector: "article"
+      title_selector: "h2"
+      link_selector: "h2 a"
+      summary_selector: "p"
+      date_selector: "time"
+      date_attr: datetime
+
+  # --- Commercial threat intel ------------------------------------------------------
+  # Cyberint knowledge base news (src/sources/cyberint_news.py). Needs CYBERINT_API_TOKEN in .env.
+  # Valid filter values: POST <base_url>/knowledgebase/external/api/v1/news/metadata
+  - id: cyberint_news
+    type: cyberint_news
+    enabled: true
+    name: Cyberint
+    category: vendor
+    trust: 80
+    options:
+      base_url: "https://example.cyberint.io"
+      token_env: CYBERINT_API_TOKEN
+      # filters: {labels: [leak, breach], sectors: [Finance], regions: [Europe, Global]}
+      # filter_mode: or
+      max_pages: 5                    # x100 news items per run
+      skip_tag_types: [Region, Country, Sector]   # broad tags that would falsely trigger region/sector keywords
+
+  # --- Custom authenticated API template (see src/sources/example_api.py) -------------
+  - id: example_api
+    type: example_api
+    enabled: false
+    name: Example vendor API
+    category: vendor
+    trust: 75
+    options:
+      url: "https://api.example.com/v1/reports"
+      api_key_env: EXAMPLE_API_KEY
+      items_path: data.items
+      field_map: {title: name, link: url, summary: description, published: created_at}

@@ -1,0 +1,58 @@
+{% if markdown and markdown.frontmatter %}
+---
+{{ {"type": "cti-review", "date": date, "generated": generated_iso,
+     "tags": markdown.tags + ["cti-review"], "days": (days|float) if "." in days else days|int, "items": rows|length,
+     "briefed": status_totals.briefed if status_totals else 0, "filtered": status_totals.filtered if status_totals else 0,
+     "filters": filters or none}|yaml }}---
+
+{% endif %}
+# CTI Review
+
+{{ generated }} · last {{ days }} day(s) · {{ rows|length }} item(s){% if filters %} · {{ filters }}{% endif %}
+
+{% if limit_reached %}
+
+> Limit of {{ rows|length }} items reached; narrow the filters or raise --limit.
+{% endif %}
+{% if rows %}
+
+## Per source
+
+Quiet score (`limits.min_score`) is {{ min_score }}. Many *filtered* items with a low average = mostly noise; briefed items with a low average may need more trust or keywords.
+
+| Source |{% for st in statuses %} {{ st }} |{% endfor %} Total | Avg score |
+|---|{% for st in statuses %}--:|{% endfor %}--:|--:|
+{% for s in by_source %}
+| {{ s.source }} |{% for st in statuses %} {{ s[st] or '' }} |{% endfor %} {{ s.total }} | {{ s.avg_score }} |
+{% endfor %}
+| **All** |{% for st in statuses %} **{{ status_totals[st] }}** |{% endfor %} **{{ rows|length }}** | |
+{% if top_terms %}
+
+## Keyword hits
+
+How often each `gating.yaml` term matched (top 40) and how many of those items were briefed. Terms that hit often but are never briefed are candidates for a lower weight or the noise group; noise terms start with `-`.
+
+| Term | Hits | Briefed |
+|---|--:|--:|
+{% for t in top_terms %}
+| {{ t.term|mdcell }} | {{ t.hits }} | {{ t.briefed }} |
+{% endfor %}
+{% endif %}
+{% if with_terms < rows|length %}
+
+_{{ rows|length - with_terms }} item(s) were stored before keyword tracking was added; their terms are unknown._
+{% endif %}
+{% endif %}
+{% for day, items in by_day %}
+
+## {{ day }} ({{ items|length }})
+
+| Time | Status | Score | Source | Title |
+|---|---|--:|---|---|
+{% for r in items %}
+| {{ r.time }} | {{ r.label }} | {{ '%.1f'|format(r.score or 0) }} | {{ r.source_id }} | [{{ r.title|mdcell|mdlink }}]({{ r.link }}){% if r.headline and r.headline != r.title %}<br>Brief: {{ r.headline|mdcell }}{% endif %}{% if r.terms %}<br>*{{ r.terms|join(', ')|mdcell }}*{% endif %} |
+{% endfor %}
+{% else %}
+
+_No items match these filters._
+{% endfor %}

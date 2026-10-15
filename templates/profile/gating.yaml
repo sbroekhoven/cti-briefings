@@ -1,0 +1,72 @@
+# News gating: what matters to YOU. Matching is case-insensitive on whole words/phrases, in title and summary.
+# Nothing is ever dropped because it has no match; matches only change the score.
+# Each distinct term that hits adds `weight` points (x title_multiplier if in the title), capped at `cap` per group.
+# A negative weight subtracts. always_include: true means a hit bypasses the quiet score (limits.min_score).
+# sections: [news] or [vulnerabilities] limits a group to items from those sources (sources.yaml); default all.
+
+profile:                        # sent to the LLM so it knows who it is writing for. Edit freely.
+  organization: "Example Corp, a European online brokerage (replace with your organization)"
+  sector: "financial services, online brokerage and trading"
+  regulation: "DORA, MiFID II, BaFin, DNB, PSD2"
+  region: "Netherlands, Germany, EU"
+  team: "IT security (CTI, vulnerability management, application security, architecture)"
+  notes: "Prioritize actively exploited vulnerabilities, threats to retail trading platforms and customer accounts, and supply chain issues."
+
+groups:
+  organization:                 # your own identity: company, brands, domains, websites, people
+    weight: 30
+    cap: 60
+    always_include: true
+    terms:
+      - Example Corp
+      - example.com
+      # - Your Name
+      # - "Another brand"
+
+  sector:
+    weight: 8
+    cap: 24
+    terms: [finance, financial, bank, banking, broker, brokerage, trading, "trading platform", stock, stocks,
+            securities, investor, investors, payment, payments, fintech, crypto, cryptocurrency, SWIFT,
+            "open banking", "market data", exchange]
+
+  regulation:
+    weight: 8
+    cap: 16
+    terms: [DORA, MiFID, PSD2, BaFin, DNB, ESMA, EBA, ENISA, NIS2, GDPR, "Digital Operational Resilience"]
+
+  region:
+    weight: 4
+    cap: 8
+    terms: [Netherlands, Dutch, Germany, German, EU, Europe, European]
+
+  stack:                        # technology you run or depend on. Extend with your real stack.
+    weight: 8
+    cap: 24
+    terms: ["Microsoft 365", "Entra ID", Intune, Azure, Kubernetes, Docker, Java, Spring,
+            Android, iOS, OpenSSL, TLS, VPN, Fortinet, "Check Point", Citrix, npm, PyPI]
+
+  threats:
+    weight: 5
+    cap: 15
+    terms: [ransomware, DDoS, phishing, "credential stuffing", "account takeover", infostealer, "supply chain",
+            "data breach", fraud, "SIM swap", deepfake, "API abuse", botnet, "threat actor"]
+
+  severity:
+    weight: 10
+    cap: 20
+    terms: ["actively exploited", "zero-day", "0-day", "remote code execution", RCE, "authentication bypass",
+            "known exploited", "in the wild", critical]
+
+  noise:                        # negative scoring: marketing, shopping, fluff
+    weight: -10
+    cap: 30
+    terms: [sponsored, webinar, giveaway, discount, "best VPN", "best antivirus", review, podcast, "black friday",
+            deals, "buyer's guide", "how to choose"]
+
+  vuln_noise:                   # negative scoring for vulnerability feeds only: CVE-farm products you don't run
+    weight: -15
+    cap: 45
+    sections: [vulnerabilities]
+    terms: [WordPress, "WordPress plugin", Joomla, PrestaShop, SourceCodester, PHPGurukul, itsourcecode,
+            Campcodes, code-projects, TOTOLINK, Tenda, D-Link, TP-Link, Netgear, Linksys, DrayTek]

@@ -1,0 +1,93 @@
+{#- Email version of the brief. Outlook (Windows) renders HTML with Word's engine, so this uses
+    tables, inline styles, fixed widths and bgcolor attributes instead of the browser CSS in brief.html.j2. -#}
+{%- set font = "font-family:'Segoe UI',Calibri,Arial,Helvetica,sans-serif;" -%}
+{%- set sev_color = {"critical": "#b91c1c", "high": "#ea580c", "medium": "#ca8a04", "low": "#2563eb"} -%}
+{%- set sev_bg = {"critical": "#fee2e2", "high": "#ffedd5", "medium": "#fef3c7", "low": "#dbeafe"} -%}
+{%- set h2 = font ~ "font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#4b5563;padding:24px 0 8px 0;" -%}
+{%- set small = font ~ "font-size:12px;color:#6b7280;" -%}
+{%- set badge = "font-size:11px;font-weight:bold;text-transform:uppercase;padding:1px 6px;" -%}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>CTI Brief {{ date }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background-color:#ffffff;">
+<tr><td align="center" style="padding:16px 8px;">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:680px;">
+
+<tr><td style="{{ font }}font-size:22px;font-weight:bold;color:#111827;padding:0 0 4px 0;">Cyber Threat Intelligence Brief</td></tr>
+<tr><td style="{{ small }}font-size:13px;">{{ generated }} &middot; last {{ lookback }}h &middot; {{ stats.reviewed }} stories reviewed from {{ stats.sources_ok }} sources{% if dry_run %} &middot; <b>DRY RUN PREVIEW</b>{% endif %}</td></tr>
+
+<tr><td style="{{ h2 }}">Act ({{ act|length }})</td></tr>
+{% for a in act %}
+<tr><td style="padding:0 0 10px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e5e7eb;">
+  <tr><td width="5" bgcolor="{{ sev_color.get(a.severity, '#9ca3af') }}" style="background-color:{{ sev_color.get(a.severity, '#9ca3af') }};font-size:1px;line-height:1px;">&nbsp;</td>
+  <td style="padding:12px 14px;{{ font }}font-size:14px;line-height:1.5;color:#111827;">
+    <div style="font-size:16px;font-weight:bold;padding:0 0 6px 0;">{{ a.headline }}</div>
+    <div style="padding:0 0 6px 0;">
+      <span style="{{ badge }}background-color:{{ sev_bg.get(a.severity, '#e5e7eb') }};color:{{ sev_color.get(a.severity, '#374151') }};">{{ a.severity }}</span>
+      <span style="{{ badge }}background-color:#e5e7eb;color:#374151;">{{ a.action }}</span>
+      {% for c in a.cves %}<span style="{{ badge }}background-color:#e5e7eb;color:#374151;">{{ c }}</span> {% endfor %}
+    </div>
+    <div style="padding:0 0 6px 0;">{{ a.why_it_matters }}</div>
+    {% if a.relevance_refs %}<div style="{{ small }}">Relevance: {{ a.relevance_refs|join(', ') }}</div>{% endif %}
+    {% if a.materiality_note %}<div style="{{ small }}">Update: {{ a.materiality_note }}</div>{% endif %}
+    <div style="{{ small }}">{{ a.item.source_name }}{% if a.item.also_reported_by %} (also: {{ a.item.also_reported_by|join(', ') }}){% endif %} &middot; score {{ a.item.score }} &middot;
+      {% for l in a.links %}<a href="{{ l }}" style="color:#1d4ed8;">{{ 'source' if loop.first else 'link ' ~ loop.index }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</div>
+  </td></tr>
+  </table>
+</td></tr>
+{% else %}
+<tr><td style="{{ small }}font-size:14px;font-style:italic;">Nothing requires action today.</td></tr>
+{% endfor %}
+
+<tr><td style="{{ h2 }}">Signal ({{ signal|length }})</td></tr>
+{% for s in signal %}
+<tr><td style="{{ font }}font-size:14px;line-height:1.5;color:#111827;padding:0 0 6px 0;">&bull;&nbsp; {{ s.line }} <span style="{{ small }}">(<a href="{{ s.item.link }}" style="color:#1d4ed8;">{{ s.item.source_name }}</a>)</span></td></tr>
+{% else %}
+<tr><td style="{{ small }}font-size:14px;font-style:italic;">No additional signals.</td></tr>
+{% endfor %}
+
+{% if vulns %}
+<tr><td style="{{ h2 }}">Vulnerabilities ({{ vulns|length }})</td></tr>
+<tr><td>
+  {%- set th = font ~ "font-size:11px;font-weight:bold;text-transform:uppercase;color:#4b5563;background-color:#f9fafb;padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:left;" -%}
+  {%- set td = font ~ "font-size:13px;color:#111827;padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top;" -%}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e5e7eb;">
+  <tr><th style="{{ th }}">CVE</th><th style="{{ th }}">Product / description</th><th style="{{ th }}text-align:right;">CVSS</th><th style="{{ th }}">Status</th></tr>
+  {% for v in vulns %}
+  <tr>
+    <td style="{{ td }}white-space:nowrap;"><a href="{{ v.link }}" style="color:#1d4ed8;">{{ v.cve or 'link' }}</a></td>
+    <td style="{{ td }}">{% if v.product %}<b>{{ v.product }}</b><br>{% endif %}{{ v.description }}<br><span style="{{ small }}">{{ v.source }}{% if v.epss is not none %} &middot; EPSS {{ v.epss }}{% endif %}</span></td>
+    <td style="{{ td }}text-align:right;white-space:nowrap;">{{ v.cvss if v.cvss is not none else '–' }}</td>
+    <td style="{{ td }}">{% if v.exploited %}<span style="{{ badge }}background-color:#fee2e2;color:#991b1b;">exploited</span>{% endif %}{% if v.ransomware %} <span style="{{ badge }}background-color:#ffedd5;color:#9a3412;">ransomware</span>{% endif %}{% if v.due %}<br><span style="{{ small }}">due {{ v.due }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </table>
+</td></tr>
+{% endif %}
+
+{% if near_miss %}
+<tr><td style="{{ h2 }}">Near miss</td></tr>
+<tr><td style="{{ font }}font-size:14px;color:#111827;"><a href="{{ near_miss.link }}" style="color:#1d4ed8;">{{ near_miss.title }}</a> <span style="{{ small }}">({{ near_miss.source_name }})</span></td></tr>
+{% endif %}
+
+{% if warnings %}
+<tr><td style="{{ h2 }}">Notes</td></tr>
+<tr><td bgcolor="#fffbeb" style="background-color:#fffbeb;border:1px solid #fde68a;padding:8px 12px;{{ font }}font-size:12px;color:#92400e;">{% for w in warnings %}{{ w }}<br>{% endfor %}</td></tr>
+{% endif %}
+{% if failed_sources %}
+<tr><td style="{{ small }}padding:12px 0 0 0;">Sources that failed this run: {{ failed_sources|join(', ') }}</td></tr>
+{% endif %}
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

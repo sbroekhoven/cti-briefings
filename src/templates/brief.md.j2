@@ -1,0 +1,86 @@
+{% if markdown and markdown.frontmatter %}
+{% set sevs = act|map(attribute="severity")|list %}
+{% set props = {
+  "type": "cti-brief",
+  "date": date,
+  "generated": generated_iso,
+  "tags": markdown.tags,
+  "act": act|length,
+  "signal": signal|length,
+  "vulnerabilities": vulns|length,
+  "severity": (["critical", "high", "medium", "low"]|select("in", sevs)|first) or "none",
+  "cves": ((act|map(attribute="cves")|sum(start=[])) + (vulns|map(attribute="cve")|select|list))|unique|list,
+  "reviewed": stats.reviewed,
+  "sources_ok": stats.sources_ok,
+  "failed_sources": failed_sources,
+  "dry_run": dry_run,
+} %}
+---
+{{ props|yaml }}---
+
+{% endif %}
+# Cyber Threat Intelligence Brief
+
+{{ generated }} · last {{ lookback }}h · {{ stats.reviewed }} stories reviewed from {{ stats.sources_ok }} sources{% if dry_run %} · **DRY RUN PREVIEW**{% endif %}
+
+
+## Act ({{ act|length }})
+{% for a in act %}
+
+### {{ a.headline }}
+
+**{{ a.severity|upper }}** · {{ a.action }}{% for c in a.cves %} · `{{ c }}`{% endfor %}
+
+
+{{ a.why_it_matters }}
+{% if a.relevance_refs %}
+
+- Relevance: {{ a.relevance_refs|join(', ') }}
+{%- endif %}
+{% if a.materiality_note %}
+- Update: {{ a.materiality_note }}
+{%- endif %}
+
+- {{ a.item.source_name }}{% if a.item.also_reported_by %} (also: {{ a.item.also_reported_by|join(', ') }}){% endif %} · score {{ a.item.score }} · {% for l in a.links %}[{{ 'source' if loop.first else 'link ' ~ loop.index }}]({{ l }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+{% else %}
+
+_Nothing requires action today._
+{% endfor %}
+
+
+## Signal ({{ signal|length }})
+
+{% for s in signal %}
+- {{ s.line }} ([{{ s.item.source_name|mdlink }}]({{ s.item.link }}))
+{% else %}
+_No additional signals._
+{% endfor %}
+{% if vulns %}
+
+## Vulnerabilities ({{ vulns|length }})
+
+| CVE | Product | Description | CVSS | EPSS | Status | Source |
+|---|---|---|--:|--:|---|---|
+{% for v in vulns %}
+| [{{ v.cve or 'link' }}]({{ v.link }}) | {{ (v.product or '–')|mdcell }} | {{ v.description|mdcell }} | {{ v.cvss if v.cvss is not none else '–' }} | {{ v.epss if v.epss is not none else '–' }} | {{ 'exploited' if v.exploited else '' }}{{ ', ransomware' if v.ransomware else '' }}{{ (', due ' ~ v.due) if v.due else '' }} | {{ v.source }} |
+{% endfor %}
+{% endif %}
+{% if near_miss %}
+
+## Near miss
+
+[{{ near_miss.title|mdlink }}]({{ near_miss.link }}) ({{ near_miss.source_name }})
+{% endif %}
+{% if warnings %}
+
+## Notes
+
+{% for w in warnings %}
+> {{ w }}
+{% endfor %}
+{% endif %}
+{% if failed_sources %}
+
+_Sources that failed this run: {{ failed_sources|join(', ') }}_
+{% endif %}
