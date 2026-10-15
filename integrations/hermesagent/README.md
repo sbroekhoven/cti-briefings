@@ -50,7 +50,7 @@ cp ~/.hermes/scripts/cti-brief-wiki-reminder.py                    integrations/
 # repo → Hermes (fresh install)
 cp -r integrations/hermesagent/skill/cti-brief-to-wiki ~/.hermes/skills/research/
 cp integrations/hermesagent/scripts/cti-brief-wiki-reminder.py ~/.hermes/scripts/
-echo 'CTI_BRIEFS_PATH=$HOME/Obsidian/Personal/CTI/Briefs:$HOME/Obsidian/Work/CTI/Briefs' >> ~/.hermes/.env
+echo "CTI_BRIEFS_PATH=$HOME/Obsidian/Personal/CTI/Briefs:$HOME/Obsidian/Work/CTI/Briefs" >> ~/.hermes/.env   # double quotes: the shell fills in $HOME
 hermes cron create "20 21 * * *" --name "CTI briefs → wiki reminder" \
   --script cti-brief-wiki-reminder.py --no-agent \
   --deliver discord:<chat_id> --failure-deliver discord:<chat_id>

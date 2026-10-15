@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_BRIEFS = "~/Obsidian/Personal/CTI/Briefs:~/Obsidian/Work/CTI/Briefs"   # set CTI_BRIEFS_PATH to yours
-BRIEF_DIRS = [Path(d).expanduser() for d in os.environ.get("CTI_BRIEFS_PATH", DEFAULT_BRIEFS).split(os.pathsep) if d]
+BRIEF_DIRS = [Path(os.path.expandvars(d)).expanduser() for d in os.environ.get("CTI_BRIEFS_PATH", DEFAULT_BRIEFS).split(os.pathsep) if d]
 WIKI = Path(os.environ.get("WIKI_PATH", "~/Obsidian/llm-wiki")).expanduser()
 STATE = Path(os.environ.get("CTI_WIKI_STATE", "~/.hermes/plugin-data/cti-brief-to-wiki/state.json")).expanduser()
 

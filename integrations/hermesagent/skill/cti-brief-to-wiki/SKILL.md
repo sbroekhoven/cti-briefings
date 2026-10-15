@@ -2,7 +2,7 @@
 name: cti-brief-to-wiki
 description: "Use when reviewing CTI briefs for items worth adding to the LLM wiki."
 version: 1.0.0
-author: Sebastian
+author: Sebastian Broekhoven
 license: MIT
 platforms: [linux]
 metadata:

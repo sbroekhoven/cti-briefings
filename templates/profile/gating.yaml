@@ -5,7 +5,7 @@
 # sections: [news] or [vulnerabilities] limits a group to items from those sources (sources.yaml); default all.
 
 profile:                        # sent to the LLM so it knows who it is writing for. Edit freely.
-  organization: "Example Corp, a European online brokerage (replace with your organization)"
+  organization: "Evil Corp, a European online brokerage (replace with your organization)"
   sector: "financial services, online brokerage and trading"
   regulation: "DORA, MiFID II, BaFin, DNB, PSD2"
   region: "Netherlands, Germany, EU"

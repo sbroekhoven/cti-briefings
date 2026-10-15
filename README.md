@@ -297,3 +297,7 @@ Story text comes from the internet and is passed to an LLM, so treat it as hosti
 - **Delivery channel:** a `Deliverer` subclass in `src/delivery/`, registered in `src/delivery/__init__.py`.
 
 Details in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## License
+
+MIT, see [LICENSE](LICENSE).
