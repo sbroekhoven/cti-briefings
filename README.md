@@ -272,6 +272,8 @@ Both read the same `~/.config/cti-brief`, so you can try code changes against yo
 - For a fully separate sandbox, use `export CTI_PROFILES_DIR=/tmp/cti-sandbox` (or `CTI_CONFIG=...`) in the dev shell, then `--init test`. Or run a copy of a profile with `--config-dir`.
 - `uv run pytest` always uses `templates/profile` in temporary folders, never your real configuration.
 
+More tips (sandboxes, testing sources and prompts, the database, releasing): see [DEVELOPMENT.md](DEVELOPMENT.md).
+
 ## Operations
 
 - **Backups:** every real run first copies the profile's `intel.db` to `backups/intel_<UTC timestamp>.db` in its data folder; the newest `general.backup_keep` (14) are kept. To restore: stop cron, then `cp backups/intel_<stamp>.db intel.db` inside the data folder (`--where` shows it). Backing up the profile folder also backs up its history, unless `data_dir` moved the data elsewhere.
