@@ -8,11 +8,11 @@ Modular cyber threat intelligence collector and daily brief generator. It pulls 
 
 Output: HTML, Markdown with front matter (e.g. into an Obsidian vault), email and Microsoft Teams. A weekly review shows everything the tool saw, for tuning the gate. Run several **profiles** side by side (say a work brief and a personal one), each with its own sources, keywords, prompt and history.
 
-How it works inside: see [ARCHITECTURE.md](ARCHITECTURE.md).
+Documentation: [ARCHITECTURE.md](ARCHITECTURE.md) (how it works inside), [DEVELOPMENT.md](DEVELOPMENT.md) (working on the code), [CHANGELOG.md](CHANGELOG.md) (what changed, and upgrade steps), [integrations/hermesagent/](integrations/hermesagent/README.md) (optional: briefs into an LLM wiki).
 
 ## Quickstart
 
-Requirements: [uv](https://docs.astral.sh/uv/) and the [Claude Code](https://claude.com/claude-code) CLI, installed and logged in.
+Requirements: Linux or macOS, [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ when needed), and the [Claude Code](https://claude.com/claude-code) CLI, installed and logged in.
 
 ```bash
 git clone https://github.com/sbroekhoven/cti-briefings && cd cti-briefings
@@ -99,6 +99,8 @@ prompt        /home/you/.config/cti-brief/profiles/mine/prompt.md
 ## Run
 
 ```bash
+uv run python -m src.main --init NAME             # new profile from the template (see Quickstart)
+uv run python -m src.main --list-profiles
 export CTI_PROFILE=mine                           # or pass --profile mine to each command
 uv run python -m src.main --dry-run               # collect, score, dedup and list candidates. No LLM, no DB writes, no delivery
 uv run python -m src.main --dry-run --with-llm    # also call the LLM and write briefs/*_dryrun.html (no DB, no Markdown, no delivery)
@@ -249,8 +251,9 @@ env -i HOME=$HOME PATH=/usr/bin:/bin bash -c 'cd /home/you/apps/cti-briefings &&
 
 ## Updating
 
+In the checkout that cron runs:
+
 ```bash
-cd ~/apps/cti-briefings
 git pull --ff-only && uv sync && uv run pytest -q
 ```
 
@@ -258,21 +261,9 @@ Updates never touch your profiles: they live outside the checkout, and `--init` 
 
 ## Development
 
-Keep two checkouts of the same repo: a **live** one that cron runs and that you never edit, and a **dev** one where you work.
+If you change the code and also rely on the briefs, keep two checkouts of the repo. A **live** one runs from cron and you never edit it, only `git pull`. A **dev** one is where you work. Both read the same `~/.config/cti-brief`, and dry runs from dev never write anything, so you can test code changes on your real profiles safely. `uv run pytest` never touches your configuration.
 
-```text
-~/code/cti-briefings   dev: branches, tests, experiments. Push to GitHub when ready
-~/apps/cti-briefings   live: cron runs here. Update with git pull (see Updating)
-```
-
-Both read the same `~/.config/cti-brief`, so you can try code changes against your real profiles from dev:
-
-- `--dry-run` and `--dry-run --with-llm` are safe there. They never write the database, Markdown or deliveries.
-- A real run from dev updates the live database. That does no harm, but those items then count as already briefed.
-- For a fully separate sandbox, use `export CTI_PROFILES_DIR=/tmp/cti-sandbox` (or `CTI_CONFIG=...`) in the dev shell, then `--init test`. Or run a copy of a profile with `--config-dir`.
-- `uv run pytest` always uses `templates/profile` in temporary folders, never your real configuration.
-
-More tips (sandboxes, testing sources and prompts, the database, releasing): see [DEVELOPMENT.md](DEVELOPMENT.md).
+[DEVELOPMENT.md](DEVELOPMENT.md) has the details: the dev/live workflow, sandbox profiles, testing sources and prompts, inspecting the database, and releasing.
 
 ## Operations
 
@@ -297,6 +288,8 @@ Story text comes from the internet and is passed to an LLM, so treat it as hosti
 - **Output format:** add `src/templates/brief.<fmt>.j2` and list `<fmt>` in `paths.brief_formats`.
 - **LLM engine:** a file in `src/llm/` with `@register_engine("name")`, selected with `llm.engine`.
 - **Delivery channel:** a `Deliverer` subclass in `src/delivery/`, registered in `src/delivery/__init__.py`.
+
+A step-by-step workflow for building and testing a source is in [DEVELOPMENT.md](DEVELOPMENT.md#working-on-a-source).
 
 Details in [ARCHITECTURE.md](ARCHITECTURE.md).
 

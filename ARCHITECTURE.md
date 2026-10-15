@@ -8,7 +8,8 @@ How cti-brief works inside: the flow of a run, what each module owns, the data m
 - **Code decides, the LLM advises.** Scoring, ranking, dedup and every limit are deterministic code. The LLM only chooses among candidates it was given and writes the wording; its reply is validated before use.
 - **Story text is hostile.** Everything fetched from the internet is treated as untrusted data, from the prompt to the LLM's sandbox.
 - **One broken part never stops the brief.** A failing source, backup, prune or delivery channel is logged and skipped; only a failure in the core flow fails the run, and that is reported.
-- **No secrets in config.** YAML names environment variables; values come from `.env`.
+- **No secrets in config.** YAML names environment variables; values come from the environment or `.env` files.
+- **Your config is not the code.** Profiles, data and secrets live outside the checkout (`~/.config/cti-brief`), so updating is `git pull` and the public repo can't contain them.
 
 ## A run, step by step
 
@@ -29,7 +30,7 @@ backup intel.db ─► collect (parallel) ─► lookback filter ─► score �
                                     persist items + briefings ─► deliver (email, Teams) ─► prune
 ```
 
-1. **Backup.** On a real run with an existing database, `Database.backup()` copies it to `backups/` first (SQLite online backup, rotation keeps `general.backup_keep`).
+1. **Backup.** On a real run with an existing database, `Database.backup()` copies it to `backups/` in the profile's data folder first (SQLite online backup, rotation keeps `general.backup_keep`).
 2. **Collect.** `collect()` runs every enabled source's `fetch(since)` in a thread pool. A source that raises is recorded as failed in `source_stats`; the others continue.
 3. **Lookback filter.** Items published before `now - lookback` are dropped (items without a date are kept).
 4. **Score.** `Scorer` (`src/scoring.py`) sets `score`, `score_breakdown` and `matched_terms` on each item. See Scoring.
@@ -47,13 +48,44 @@ If anything in steps 2–12 raises, the run is marked `failed` (exit code 1) and
 
 **Dry runs** open the database read-only, write nothing to it and never deliver. Without `--with-llm` they stop after step 8 and print the candidates; with it they render an HTML preview only.
 
+## Profiles and configuration (`src/config.py`)
+
+A **profile** is a folder with `settings.yaml`, `sources.yaml`, `gating.yaml` and `prompt.md`, plus an optional `.env`. Every run uses exactly one profile. Profiles share the code and the brief templates; nothing else.
+
+**Locations.** `Locations.resolve()` decides where things are, each setting by the first match of: CLI flag, `CTI_*` environment variable, the app file `config.yaml`, built-in default. It records where each answer came from, which `--where` prints.
+
+| Setting | Default |
+| --- | --- |
+| app config file (`--config`, `CTI_CONFIG`) | `$XDG_CONFIG_HOME/cti-brief/config.yaml` |
+| profiles dir (`profiles_dir`) | `profiles/` next to `config.yaml` |
+| data dir (`data_dir`) | unset: `<profile>/data`; set: `<data_dir>/<profile>` |
+| shared secrets (`env_file`) | `.env` next to `config.yaml` |
+| profile (`--profile`, `CTI_PROFILE`, `default_profile`) | none: the run stops and lists the profiles |
+
+`config.yaml` is optional, and unknown keys are an error. `--config-dir DIR` bypasses the profiles dir and uses `DIR` as the profile, with data in `DIR/data`. The tests and sandboxes use this.
+
+**Two path bases.** `Config.path()` resolves a relative path in `settings.yaml` against one of two folders. `DATA_KEYS` (`paths.database`, `paths.briefs_dir`, `paths.backups_dir`, `markdown.dir`) use the profile's data dir, and everything else (`paths.prompt`) uses the profile folder. So moving data with `data_dir` never requires editing a profile.
+
+**Secrets.** `Config` loads `<profile>/.env`, then the shared `.env`, with `load_dotenv` never overriding a value that is already set. The resulting precedence is real environment, then profile, then shared.
+
+**New profiles.** `init_profile()` (`--init NAME`) copies `templates/profile/` from the repo, writes the absolute `claude` path into it, and creates the shared `.env` (mode 600) and a commented-out `config.yaml` when missing. It refuses an existing profile or an invalid name and never overwrites anything.
+
+**Repository layout.**
+
+```text
+src/                     the application (modules below)
+templates/profile/       profile template: --init copies it, the tests run against it
+tests/                   pytest suite, no network, isolated from ~/.config/cti-brief
+integrations/hermesagent optional Hermes Agent skill that reviews briefs into an LLM wiki
+```
+
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `main.py` | CLI, `--history` review (`_print_history`, `_review_summary`), `--reset` (`reset_database`) |
+| `main.py` | CLI, `--init` (`_init`), `--where` (`_where`), `--list-profiles`, `--history` review (`_print_history`, `_review_summary`), `--reset` (`reset_database`) |
 | `pipeline.py` | `run_pipeline()` orchestration, ranking, vulnerability relevance, output paths and note names, failure notice, silent-source check, prune |
-| `config.py` | `Locations.resolve()`: config file, profiles dir, data dir and shared `.env`, each from flag > `CTI_*` env > `config.yaml` > default (`~/.config/cti-brief`), with the origin kept for `--where`. `Config`: picks a profile (`--profile` > `CTI_PROFILE` > `default_profile`, or `config_dir`), loads its `*.yaml`, then `<profile>/.env` and the shared `.env` (real environment wins); `Config.get("a.b.c")`; `Config.path()` resolves `DATA_KEYS` (database, briefs, backups, markdown.dir) against the data dir (`<profile>/data` or `<data_dir>/<profile>`) and other paths against the profile folder. `init_profile()`: `--init`, copies `templates/profile/` and creates `.env` (600) and `config.yaml` when missing; never overwrites |
+| `config.py` | `Locations` (where profiles, data and secrets are), `Config` (one profile: settings, `get()`, `path()`), `init_profile()`. See Profiles and configuration |
 | `models.py` | `IntelItem`, URL normalisation, stable item ids |
 | `sources/` | one collector per type; `base.py` holds the plugin contract and registry |
 | `scoring.py` | keyword groups, trust, category, recency, source bonus |
@@ -61,7 +93,7 @@ If anything in steps 2–12 raises, the run is marked `failed` (exit code 1) and
 | `analysis.py` | prompt input, prompt template filling, validation of the LLM reply |
 | `llm/` | engine contract (`base.py`, JSON extraction and retry) and the Claude Code CLI engine |
 | `render.py` | template context, Jinja environment and filters, vulnerability rows, plain-text version |
-| `templates/` | `brief.html.j2` (browser), `brief.md.j2` (Markdown + front matter), `email.html.j2` (Outlook-safe), `review.*.j2` |
+| `templates/` (in `src/`) | `brief.html.j2` (browser), `brief.md.j2` (Markdown + front matter), `email.html.j2` (Outlook-safe), `review.*.j2` |
 | `delivery/` | `Deliverer` contract, SMTP email, Teams Workflows webhook |
 | `db.py` | SQLite schema and migrations, backup, prune, history queries |
 | `http.py` | shared HTTP client: user agent, timeout, retries on 429/5xx |
@@ -140,7 +172,7 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 `build_context()` produces one dictionary (act, signal, vulns, near_miss, warnings, stats, dates, failed sources); every template renders from it, so formats can't drift apart in content.
 
 - **Jinja:** HTML templates (`*.html.j2`) are autoescaped; Markdown is not. Filters: `mdlink` and `mdcell` escape characters that would break Markdown links and tables; `yaml` dumps front matter, with ISO dates unquoted so Obsidian treats them as dates.
-- **Paths:** `output_dir()` sends Markdown to `markdown.dir` (on real runs) and everything else to `paths.briefs_dir`. `markdown_name()` builds note names from `markdown.*_filename`; `unique_path()` never overwrites an existing file.
+- **Paths:** `output_dir()` sends Markdown to `markdown.dir` (on real runs) and everything else to `paths.briefs_dir` in the data folder. `markdown_name()` builds note names from `markdown.*_filename`; `unique_path()` never overwrites an existing file.
 - **Email** uses its own template (`email.html.j2`): tables, inline styles, a fixed 680px width and `bgcolor` attributes, because Outlook on Windows renders with Word's engine and ignores most CSS.
 - **Plain text** (`render_text`) is the email's text part.
 
@@ -161,7 +193,9 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 | Silent failure under cron | failure notice via all channels; failed status and error in `runs` | `pipeline.py` |
 | Dead source unnoticed | warning after 4 consecutive empty runs | `pipeline._silent_sources` |
 | Unbounded growth | retention, never shorter than the dedup history | `db.prune`, `pipeline._prune` |
-| Test runs leaking into real data | dry runs never write the DB, Markdown or deliver; tests redirect every path to a temp dir | `pipeline.py`, `tests/test_pipeline._cfg` |
+| Test runs leaking into real data | dry runs never write the DB, Markdown or deliver; tests redirect every path to a temp dir and never see `~/.config/cti-brief` | `pipeline.py`, `tests/test_pipeline._cfg`, `tests/conftest.py` |
+| Private profiles ending up in the public repo | profiles, data and secrets live outside the checkout; the repo only has the template | `config.Locations` |
+| Secrets readable by other users | `--init` creates the shared `.env` with mode 600 | `config.init_profile` |
 
 ## Testing
 
@@ -174,6 +208,8 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 | `test_analysis.py` | LLM reply validation |
 | `test_pipeline.py` | end-to-end runs, formats, Markdown paths and front matter, vulnerability table, review |
 | `test_hardening.py` | Claude lockdown, backup and reset, prune, silent sources, failure notice, SMTP alert |
+| `test_config.py` | location precedence (flag, env, `config.yaml`, default), profile selection, data vs config paths, `.env` precedence, `--where` |
+| `test_init.py` | `--init`: files created, `claude` path, `.env` mode, never overwrites, name check |
 
 ## Extension points
 
