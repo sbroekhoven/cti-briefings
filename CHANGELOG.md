@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Configurable titles:** `titles.brief`, `titles.short` and `titles.review` in `settings.yaml` set the headings of briefs, reviews, email, plain text and Teams, so a profile can be something other than a CTI brief (e.g. an AI landscape brief). Defaults are unchanged; add the `titles:` block from `templates/profile/settings.yaml` only if you want other names.
+- **Custom sections:** a source can use any `section` value (e.g. `section: releases`). It is ranked with the news, and keyword groups can be limited to it with `sections: [releases]`.
+
 ## 0.2.0
 
 - **Profiles:** run several independent briefs (e.g. work and personal) from one checkout. Each profile has its own `settings.yaml`, `sources.yaml`, `gating.yaml`, `prompt.md` and data (database, briefs, backups, logs). Select one with `--profile NAME` or `CTI_PROFILE`.

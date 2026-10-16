@@ -21,6 +21,13 @@ paths:
   brief_formats: [html, md]     # any of: html, md (one file per format, from src/templates/brief.<fmt>.j2)
   prompt: prompt.md
 
+# Headings of the brief and the review (HTML, Markdown, email, plain text, Teams). Note and email names are set
+# separately (markdown.*_filename, delivery.email.subject).
+titles:
+  brief: "Cyber Threat Intelligence Brief"
+  short: "CTI Brief"            # browser tab, plain-text email part, Teams card, failure notice
+  review: "CTI Review"
+
 # Markdown output (briefs with paths.brief_formats containing md, and --history reviews).
 markdown:
   dir: null   # folder for .md files. null = paths.briefs_dir.

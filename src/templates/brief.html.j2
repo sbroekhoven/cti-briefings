@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CTI Brief {{ date }}</title>
+<title>{{ titles.short }} {{ date }}</title>
 <style>
   body{margin:0;background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;line-height:1.5}
   .wrap{max-width:760px;margin:0 auto;padding:24px 16px}
@@ -28,7 +28,7 @@
 </style>
 </head>
 <body><div class="wrap">
-<h1>Cyber Threat Intelligence Brief</h1>
+<h1>{{ titles.brief }}</h1>
 <div class="meta">{{ generated }} &middot; last {{ lookback }}h &middot; {{ stats.reviewed }} stories reviewed from {{ stats.sources_ok }} sources{% if dry_run %} &middot; <strong>DRY RUN PREVIEW</strong>{% endif %}</div>
 
 <h2>Act ({{ act|length }})</h2>

@@ -15,7 +15,7 @@ class TeamsDeliverer(Deliverer):
 
     def send(self, ctx: dict, html: str, text: str, brief_path: str) -> None:
         body: list[dict] = [
-            {"type": "TextBlock", "text": f"CTI Brief {ctx['date']}", "weight": "Bolder", "size": "Large"},
+            {"type": "TextBlock", "text": f"{ctx['titles']['short']} {ctx['date']}", "weight": "Bolder", "size": "Large"},
             {"type": "TextBlock", "isSubtle": True, "spacing": "None",
              "text": f"{len(ctx['act'])} act, {len(ctx['signal'])} signal, {ctx['stats']['reviewed']} reviewed"},
         ]

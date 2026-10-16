@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from .config import ROOT, Config, Locations, available_profiles, init_profile
 from .db import Database
-from .pipeline import markdown_name, markdown_settings, output_dir, run_pipeline, unique_path
+from .pipeline import brief_titles, markdown_name, markdown_settings, output_dir, run_pipeline, unique_path
 from .render import render
 from .sources import REGISTRY, build_sources
 
@@ -190,7 +190,7 @@ def _print_history(cfg: Config, args) -> int:
            "days": f"{args.history:g}", "filters": " · ".join(f for f in filters if f),
            "limit_reached": limit_reached, "date": now.strftime("%Y-%m-%d"),
            "generated": now.strftime("%Y-%m-%d %H:%M %Z")}
-    ctx.update(generated_iso=now.strftime("%Y-%m-%dT%H:%M:%S"), markdown=markdown_settings(cfg))
+    ctx.update(generated_iso=now.strftime("%Y-%m-%dT%H:%M:%S"), markdown=markdown_settings(cfg), titles=brief_titles(cfg))
     stamp = now.strftime("%Y%m%d_%H%M%S")
     for fmt in ("html", "md"):
         name = markdown_name(cfg, "review", stamp) if fmt == "md" else f"review_{stamp}"

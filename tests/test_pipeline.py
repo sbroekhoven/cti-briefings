@@ -181,3 +181,14 @@ def test_dry_run_with_llm_writes_html_only(tmp_path, make_item, monkeypatch):
     assert pipeline.run_pipeline(cfg, dry_run=True, with_llm=True) == 0
     assert [p.suffix for p in (tmp_path / "briefs").glob("brief_*")] == [".html"]
     assert not (tmp_path / "markdown").exists()
+
+
+def test_titles_come_from_settings(tmp_path, make_item, monkeypatch):
+    cfg = _cfg(tmp_path, make_item, monkeypatch)
+    cfg.settings["titles"] = {"brief": "AI Landscape Brief", "short": "AI Brief"}
+    assert pipeline.run_pipeline(cfg, deliver=False) == 0
+    html = next((tmp_path / "briefs").glob("brief_*.html")).read_text()
+    md = next((tmp_path / "markdown").glob("*.md")).read_text()
+    assert "<title>AI Brief " in html and "<h1>AI Landscape Brief</h1>" in html and "# AI Landscape Brief" in md
+    assert "Cyber Threat Intelligence" not in html
+    assert pipeline.brief_titles(cfg)["review"] == "CTI Review"   # unset keys keep the default

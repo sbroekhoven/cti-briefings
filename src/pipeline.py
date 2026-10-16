@@ -15,7 +15,7 @@ from .dedup import dedup_within_run, filter_history
 from .delivery import enabled_deliverers
 from .llm import get_engine
 from .models import IntelItem
-from .render import build_context, render, render_html, render_text
+from .render import DEFAULT_TITLES, build_context, render, render_html, render_text
 from .scoring import Scorer
 from .sources import build_sources
 from .util import utcnow
@@ -146,6 +146,7 @@ def run_pipeline(cfg: Config, *, dry_run: bool = False, with_llm: bool = False, 
                             tz=general.get("timezone", "UTC"), lookback=lookback, dry_run=dry_run,
                             failed_sources=[k for k, v in source_stats.items() if not v["ok"]], now=now)
         # html is always rendered because email delivery needs it, even when not written to disk.
+        ctx["titles"] = brief_titles(cfg)
         html, text = render_html(ctx), render_text(ctx)
         ctx["markdown"] = markdown_settings(cfg)
         suffix = "_dryrun" if dry_run else ""
@@ -248,10 +249,15 @@ def _alert_failure(cfg: Config, exc: Exception) -> None:
             f"{cfg.path('paths.database', 'intel.db')}.")
     for d in enabled_deliverers(cfg.settings):
         try:
-            d.send_alert(f"CTI brief run FAILED ({cfg.name})", text)
+            d.send_alert(f"{brief_titles(cfg)['short']} run FAILED ({cfg.name})", text)
             log.info("Failure notice sent via %s", d.name)
         except Exception as alert_exc:  # never hide the original error
             log.error("Failure notice via %s failed: %s", d.name, alert_exc)
+
+
+def brief_titles(cfg: Config) -> dict:
+    """Headings for briefs and reviews: settings.yaml `titles` over the CTI defaults."""
+    return {**DEFAULT_TITLES, **{k: str(v) for k, v in (cfg.get("titles") or {}).items() if k in DEFAULT_TITLES and v}}
 
 
 def markdown_settings(cfg: Config) -> dict:

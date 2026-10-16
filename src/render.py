@@ -51,13 +51,17 @@ def vuln_rows(items: list) -> list[dict]:
     return rows
 
 
+# Overridable per profile with `titles:` in settings.yaml (see pipeline.brief_titles).
+DEFAULT_TITLES = {"brief": "Cyber Threat Intelligence Brief", "short": "CTI Brief", "review": "CTI Review"}
+
+
 def build_context(analysis: dict, stats: dict, vulns: list | None = None, *, tz: str, lookback: float,
                   dry_run: bool, failed_sources: list[str], now: datetime) -> dict:
     local = now.astimezone(ZoneInfo(tz))
     return {
         "act": analysis["act"], "signal": analysis["signal"], "near_miss": analysis["near_miss"],
         "vulns": vuln_rows(vulns or []),
-        "warnings": analysis["warnings"], "stats": stats, "lookback": f"{lookback:g}", "dry_run": dry_run,
+        "titles": dict(DEFAULT_TITLES), "warnings": analysis["warnings"], "stats": stats, "lookback": f"{lookback:g}", "dry_run": dry_run,
         "failed_sources": failed_sources, "date": local.strftime("%Y-%m-%d"),
         "generated": local.strftime("%Y-%m-%d %H:%M %Z"), "filename_stamp": local.strftime("%Y%m%d_%H%M%S"),
         "generated_iso": local.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -74,7 +78,7 @@ def render_html(ctx: dict) -> str:
 
 
 def render_text(ctx: dict) -> str:
-    lines = [f"CTI Brief {ctx['generated']}", ""]
+    lines = [f"{ctx.get('titles', DEFAULT_TITLES)['short']} {ctx['generated']}", ""]
     lines.append(f"ACT ({len(ctx['act'])})")
     for a in ctx["act"]:
         lines += [f"- [{a['severity'].upper()}/{a['action']}] {a['headline']}", f"  {a['why_it_matters']}", f"  {a['links'][0]}"]
