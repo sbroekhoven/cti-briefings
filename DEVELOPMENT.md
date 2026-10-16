@@ -131,6 +131,8 @@ The templates are in `src/templates/*.j2`, shared by all profiles. To see a chan
 
 ## Looking inside the database
 
+The queries below use the `sqlite3` command-line tool (`sudo apt install sqlite3`, `brew install sqlite`). The tool itself doesn't need it: Python ships its own SQLite.
+
 ```bash
 DB=~/.config/cti-brief/profiles/private/data/intel.db      # or take it from --where
 sqlite3 -readonly -header -column "$DB" \
