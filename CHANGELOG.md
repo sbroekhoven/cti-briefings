@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Hugo blog posts:** add `hugo` to `paths.brief_formats` to write each brief as a Hugo page bundle (`<content_dir>/<date>/index.en.md` + `index.nl.md`) for a public blog: minimal front matter (title, date, draft, categories, tags), no internal details, and Act headings tagged with their severity (`{.sev-high}`) for styling. The Dutch text is written by the same LLM call. Opt-in: copy the `hugo:` block from `templates/profile/settings.yaml`. See [README_HUGO.md](README_HUGO.md).
 - **Configurable titles:** `titles.brief`, `titles.short` and `titles.review` in `settings.yaml` set the headings of briefs, reviews, email, plain text and Teams, so a profile can be something other than a CTI brief (e.g. an AI landscape brief). Defaults are unchanged; add the `titles:` block from `templates/profile/settings.yaml` only if you want other names.
 - **Custom sections:** a source can use any `section` value (e.g. `section: releases`). It is ranked with the news, and keyword groups can be limited to it with `sections: [releases]`.
 

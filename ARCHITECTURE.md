@@ -93,7 +93,7 @@ integrations/hermesagent optional Hermes Agent skill that reviews briefs into an
 | `analysis.py` | prompt input, prompt template filling, validation of the LLM reply |
 | `llm/` | engine contract (`base.py`, JSON extraction and retry) and the Claude Code CLI engine |
 | `render.py` | template context, Jinja environment and filters, vulnerability rows, plain-text version |
-| `templates/` (in `src/`) | `brief.html.j2` (browser), `brief.md.j2` (Markdown + front matter), `email.html.j2` (Outlook-safe), `review.*.j2` |
+| `templates/` (in `src/`) | `brief.html.j2` (browser), `brief.md.j2` (Markdown + front matter), `brief.hugo.md.j2` (Hugo post per language), `email.html.j2` (Outlook-safe), `review.*.j2` |
 | `delivery/` | `Deliverer` contract, SMTP email, Teams Workflows webhook |
 | `db.py` | SQLite schema and migrations, backup, prune, history queries |
 | `http.py` | shared HTTP client: user agent, timeout, retries on 429/5xx |
@@ -154,7 +154,7 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 
 **Input** (`build_input`): the profile and keyword groups from `gating.yaml`, and the candidates as `stories` with small integer ids `1..N` (title, summary, url, source, category, section, trust, score, published, matched terms, also_reported_by, prior_briefings). Integer ids mean the model can only refer to stories it was given.
 
-**Prompt:** the profile's `prompt.md` (`paths.prompt`) with `{act_max}`, `{signal_max}`, `{lookback_hours}` filled in, followed by the input as JSON. It asks for a single JSON object: `act`, `signal`, `merges`, `materiality_notes`, `near_miss`.
+**Prompt:** the profile's `prompt.md` (`paths.prompt`) with `{act_max}`, `{signal_max}`, `{lookback_hours}` filled in, followed by the input as JSON. It asks for a single JSON object: `act`, `signal`, `merges`, `materiality_notes`, `near_miss`. When Hugo output has languages other than English, `translation_rule()` adds one instruction in code (so `prompt.md` stays the same and other profiles send the same prompt): each ACT and SIGNAL entry also gets `translations: {"nl": {...}}`.
 
 **Engine** (`src/llm/`): `LLMEngine.analyze()` calls `complete()`, extracts the JSON object (tolerating code fences or prose), and retries `retries` times with a "reply with only JSON" nudge. `ClaudeCodeEngine` pipes the prompt into `claude -p --output-format json` and reads `result` from the envelope.
 
@@ -164,6 +164,7 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 - a story with `prior_briefings` is only allowed with a `materiality_notes` entry;
 - ACT is capped at `act_max`, ACT + SIGNAL at `max_items_reported`;
 - vulnerability-section stories may be ACT but never SIGNAL (they are in the table);
+- translations are kept only for the requested languages and known string fields, truncated like the English text; a missing one is a warning and the English text is used;
 - headlines and lines are truncated, `action` and `severity` must be known values, links must be http(s) (otherwise the story's own link is used);
 - every dropped entry becomes a warning shown under *Notes*.
 
@@ -171,8 +172,9 @@ Scoring only ranks. Nothing is dropped for having no match; the quiet score deci
 
 `build_context()` produces one dictionary (act, signal, vulns, near_miss, warnings, stats, dates, failed sources); every template renders from it, so formats can't drift apart in content.
 
-- **Jinja:** HTML templates (`*.html.j2`) are autoescaped; Markdown is not. Filters: `mdlink` and `mdcell` escape characters that would break Markdown links and tables; `yaml` dumps front matter, with ISO dates unquoted so Obsidian treats them as dates.
+- **Jinja:** HTML templates (`*.html.j2`) are autoescaped; Markdown is not. Filters: `mdlink` and `mdcell` escape characters that would break Markdown links and tables; `yaml` dumps front matter, with ISO dates unquoted so Obsidian treats them as dates; `hugosafe` breaks up `{{` in untrusted text so it can't run a Hugo shortcode.
 - **Paths:** `output_dir()` sends Markdown to `markdown.dir` (on real runs) and everything else to `paths.briefs_dir` in the data folder. `markdown_name()` builds note names from `markdown.*_filename`; `unique_path()` never overwrites an existing file.
+- **Hugo:** `write_hugo_bundle()` writes one page bundle per brief in `hugo.content_dir` (`hugo_bundle_dir()` never reuses a folder), with `index.<lang>.md` per language from `brief.hugo.md.j2`. `localize()` swaps in each entry's translation and the fixed labels from `LABELS`. The template is the public subset: no scores, relevance refs, notes, near miss or failed sources.
 - **Email** uses its own template (`email.html.j2`): tables, inline styles, a fixed 680px width and `bgcolor` attributes, because Outlook on Windows renders with Word's engine and ignores most CSS.
 - **Plain text** (`render_text`) is the email's text part.
 

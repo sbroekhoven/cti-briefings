@@ -18,7 +18,7 @@ paths:
   database: intel.db
   briefs_dir: briefs
   backups_dir: backups
-  brief_formats: [html, md]     # any of: html, md (one file per format, from src/templates/brief.<fmt>.j2)
+  brief_formats: [html, md]     # any of: html, md, hugo (see the markdown: and hugo: blocks below)
   prompt: prompt.md
 
 # Headings of the brief and the review (HTML, Markdown, email, plain text, Teams). Note and email names are set
@@ -38,6 +38,17 @@ markdown:
   review_filename: "CTI Review {date}"
   frontmatter: true             # YAML properties at the top (date, counts, severity, CVEs, tags) for Obsidian
   tags: [cti, cti-brief]        # brief tags; reviews get these plus cti-review
+
+# Hugo blog posts (when paths.brief_formats contains hugo), see README_HUGO.md. One page bundle per brief:
+# <content_dir>/<bundle>/index.<lang>.md. Meant for a public blog: no scores, relevance refs, near miss or notes.
+hugo:
+  content_dir: null             # e.g. ~/code/blog/content/briefs. null = <briefs_dir>/hugo (safe for a first try)
+  bundle_name: "{date}"         # folder (and URL) name; {date} {time} {stamp}. A second run that day gets "-{time}"
+  languages: [en, nl]           # en is what the LLM writes; others are translated in the same LLM call
+  draft: false                  # true: review and publish by hand
+  title: {en: "CTI Brief {date}", nl: "CTI-briefing {date}"}
+  categories: [Threat Intelligence]
+  tags: [cti]
 
 # score = trust * trust_weight + category_bonus + keyword points (gating.yaml) + recency + source bonus, clamped 0..100
 scoring:

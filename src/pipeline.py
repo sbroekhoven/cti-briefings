@@ -15,7 +15,7 @@ from .dedup import dedup_within_run, filter_history
 from .delivery import enabled_deliverers
 from .llm import get_engine
 from .models import IntelItem
-from .render import DEFAULT_TITLES, build_context, render, render_html, render_text
+from .render import DEFAULT_TITLES, LABELS, build_context, localize, render, render_html, render_text
 from .scoring import Scorer
 from .sources import build_sources
 from .util import utcnow
@@ -124,6 +124,9 @@ def run_pipeline(cfg: Config, *, dry_run: bool = False, with_llm: bool = False, 
 
         max_items = int(limits.get("max_items_reported", 15))
         act_max = min(int(limits.get("act_max", 5)), max_items)
+        formats = cfg.get("paths.brief_formats") or ["html"]
+        # Hugo posts in other languages than English: the analysis call also writes the translations.
+        languages = [l for l in hugo_settings(cfg)["languages"] if l != "en"] if "hugo" in formats and not dry_run else []
         engine = get_engine(cfg.settings)
         metrics["llm_engine"] = engine.name
         analysis = {"act": [], "signal": [], "near_miss": None, "warnings": [], "merged_ids": set(), "reviewed_ids": set()}
@@ -131,9 +134,11 @@ def run_pipeline(cfg: Config, *, dry_run: bool = False, with_llm: bool = False, 
         if candidates:
             payload, by_id = build_input(candidates, cfg.gating)
             prompt = build_prompt(cfg.path("paths.prompt", "prompt.md"), payload, act_max=act_max,
-                                  signal_max=max_items - act_max, lookback_hours=lookback)
+                                  signal_max=max_items - act_max, lookback_hours=lookback,
+                                  translations={l: LABELS[l]["name"] for l in languages})
             log.info("Sending %d stories to %s", len(candidates), engine.name)
-            analysis = validate(engine.analyze(prompt), by_id, act_max=act_max, max_items=max_items)
+            analysis = validate(engine.analyze(prompt), by_id, act_max=act_max, max_items=max_items,
+                                languages=languages)
         metrics.update(act_count=len(analysis["act"]), signal_count=len(analysis["signal"]))
         analysis["warnings"] = run_warnings + analysis["warnings"]
         # A vulnerability promoted to ACT is not repeated in the table.
@@ -150,11 +155,13 @@ def run_pipeline(cfg: Config, *, dry_run: bool = False, with_llm: bool = False, 
         html, text = render_html(ctx), render_text(ctx)
         ctx["markdown"] = markdown_settings(cfg)
         suffix = "_dryrun" if dry_run else ""
-        formats = cfg.get("paths.brief_formats") or ["html"]
         written = []
-        if dry_run:  # previews are HTML only: Markdown belongs in the vault, and test runs don't
-            formats = [f for f in formats if f != "md"] or ["html"]
+        if dry_run:  # previews are HTML only: Markdown belongs in the vault/blog, and test runs don't
+            formats = [f for f in formats if f not in ("md", "hugo")] or ["html"]
         for fmt in formats:
+            if fmt == "hugo":
+                written += write_hugo_bundle(cfg, ctx)
+                continue
             name = f"brief_{ctx['filename_stamp']}{suffix}"
             if fmt == "md":
                 name = markdown_name(cfg, "brief", ctx["filename_stamp"])
@@ -263,6 +270,48 @@ def brief_titles(cfg: Config) -> dict:
 def markdown_settings(cfg: Config) -> dict:
     m = cfg.settings.get("markdown") or {}
     return {"frontmatter": m.get("frontmatter", True), "tags": list(m.get("tags") or ["cti", "cti-brief"])}
+
+
+def hugo_settings(cfg: Config) -> dict:
+    """The hugo: block of settings.yaml with defaults. Only languages with labels in render.LABELS are allowed."""
+    h = cfg.settings.get("hugo") or {}
+    languages = list(h.get("languages") or ["en"])
+    unknown = [l for l in languages if l not in LABELS]
+    if unknown:
+        raise ValueError(f"hugo.languages: unknown language(s) {', '.join(map(str, unknown))} "
+                         f"(supported: {', '.join(LABELS)})")
+    title = h.get("title") or {}
+    return {"languages": languages, "draft": bool(h.get("draft", False)),
+            "bundle_name": str(h.get("bundle_name") or "{date}"),
+            "title": title if isinstance(title, dict) else {l: title for l in languages},
+            "categories": list(h.get("categories") or []), "tags": list(h.get("tags") or [])}
+
+
+def write_hugo_bundle(cfg: Config, ctx: dict) -> list[Path]:
+    """One page bundle per brief, one index.<lang>.md per language (Hugo translation by filename)."""
+    h = hugo_settings(cfg)
+    stamp = ctx["filename_stamp"]
+    date = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}"
+    folder = (cfg.path("hugo.content_dir", "") if cfg.get("hugo.content_dir")
+              else cfg.path("paths.briefs_dir", "briefs") / "hugo")
+    bundle = hugo_bundle_dir(folder, h["bundle_name"].format(date=date, time=stamp[9:13], stamp=stamp), stamp)
+    written = []
+    for lang in h["languages"]:
+        title = str(h["title"].get(lang) or f"{ctx['titles']['short']} {{date}}").format(date=date)
+        path = bundle / f"index.{lang}.md"
+        path.write_text(render({**localize(ctx, lang), "hugo": {**h, "title": title}}, "hugo.md"), encoding="utf-8")
+        written.append(path)
+    return written
+
+
+def hugo_bundle_dir(folder: Path, name: str, stamp: str) -> Path:
+    """Like unique_path, for a bundle folder: '<name>', then '<name>-HHMM', then '<name>-HHMMSS' (URL-safe)."""
+    for candidate in (name, f"{name}-{stamp[9:13]}", f"{name}-{stamp[9:15]}"):
+        path = folder / candidate
+        if not path.exists() or candidate.endswith(stamp[9:15]):
+            break
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def markdown_name(cfg: Config, kind: str, stamp: str) -> str:

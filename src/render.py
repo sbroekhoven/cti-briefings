@@ -23,13 +23,15 @@ def _str(dumper, value):
     return dumper.represent_str(value)
 
 
-_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?$")
 _FrontMatterDumper.add_representer(str, _str)
 # Front matter: let PyYAML quote whatever else needs quoting.
 _env.filters["yaml"] = lambda d: yaml.dump(d, Dumper=_FrontMatterDumper, sort_keys=False, allow_unicode=True,
                                            default_flow_style=None, width=1000)
 # Pipes and newlines would break a Markdown table row.
 _env.filters["mdcell"] = lambda s: " ".join(str(s).split()).replace("|", "\\|")
+# Hugo would run "{{< shortcode >}}" found in untrusted story text; break up the braces.
+_env.filters["hugosafe"] = lambda s: str(s).replace("{{", "{ {").replace("}}", "} }")
 
 
 _CVE = re.compile(r"CVE-\d{4}-\d{4,}", re.I)
@@ -65,7 +67,46 @@ def build_context(analysis: dict, stats: dict, vulns: list | None = None, *, tz:
         "failed_sources": failed_sources, "date": local.strftime("%Y-%m-%d"),
         "generated": local.strftime("%Y-%m-%d %H:%M %Z"), "filename_stamp": local.strftime("%Y%m%d_%H%M%S"),
         "generated_iso": local.strftime("%Y-%m-%dT%H:%M:%S"),
+        "generated_rfc3339": local.isoformat(timespec="seconds"),
     }
+
+
+# Fixed text of the Hugo posts per language (src/templates/brief.hugo.md.j2). `name` is used in the LLM prompt.
+# Adding a language: add an entry here; hugo.languages in settings.yaml may then use its code.
+LABELS = {
+    "en": {
+        "name": "English",
+        "intro": "{reviewed} stories reviewed from {sources} sources over the last {hours} hours.",
+        "act": "Act", "signal": "Signal", "vulns": "Vulnerabilities",
+        "no_act": "Nothing requires action today.", "no_signal": "No additional signals.",
+        "source": "source", "link": "link", "also": "also",
+        "cols": ["CVE", "Product", "Description", "CVSS", "EPSS", "Status", "Source"],
+        "exploited": "exploited", "ransomware": "ransomware", "due": "due",
+        "severity": {"critical": "critical", "high": "high", "medium": "medium", "low": "low"},
+        "action": {"patch": "patch", "mitigate": "mitigate", "hunt": "hunt", "investigate": "investigate",
+                   "monitor": "monitor"},
+    },
+    "nl": {
+        "name": "Dutch",
+        "intro": "{reviewed} berichten beoordeeld uit {sources} bronnen over de afgelopen {hours} uur.",
+        "act": "Actie", "signal": "Signalen", "vulns": "Kwetsbaarheden",
+        "no_act": "Vandaag is geen actie nodig.", "no_signal": "Geen aanvullende signalen.",
+        "source": "bron", "link": "link", "also": "ook",
+        "cols": ["CVE", "Product", "Omschrijving", "CVSS", "EPSS", "Status", "Bron"],
+        "exploited": "misbruikt", "ransomware": "ransomware", "due": "deadline",
+        "severity": {"critical": "kritiek", "high": "hoog", "medium": "middel", "low": "laag"},
+        "action": {"patch": "patchen", "mitigate": "mitigeren", "hunt": "hunten", "investigate": "onderzoeken",
+                   "monitor": "monitoren"},
+    },
+}
+
+
+def localize(ctx: dict, lang: str) -> dict:
+    """The context in one language: LLM text from each entry's translations (English when missing), plus labels."""
+    def tr(entry: dict) -> dict:
+        return {**entry, **entry.get("translations", {}).get(lang, {})}
+    return {**ctx, "act": [tr(a) for a in ctx["act"]], "signal": [tr(s) for s in ctx["signal"]],
+            "lang": lang, "t": LABELS[lang]}
 
 
 def render(ctx: dict, fmt: str, template: str = "brief") -> str:

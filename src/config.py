@@ -14,7 +14,7 @@ TEMPLATE = ROOT / "templates" / "profile"   # copied by --init; also what the te
 
 # Paths in settings.yaml that hold data (resolved against the profile's data dir); all others are config
 # (resolved against the profile folder).
-DATA_KEYS = {"paths.database", "paths.briefs_dir", "paths.backups_dir", "markdown.dir"}
+DATA_KEYS = {"paths.database", "paths.briefs_dir", "paths.backups_dir", "markdown.dir", "hugo.content_dir"}
 APP_KEYS = {"profiles_dir", "data_dir", "env_file", "default_profile"}
 PROFILE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 

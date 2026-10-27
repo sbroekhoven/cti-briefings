@@ -2,6 +2,9 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+import yaml
+
 from src import pipeline
 from src.config import Config
 from src.db import Database
@@ -19,6 +22,19 @@ class FakeEngine(LLMEngine):
                            "signal": [], "merges": [], "materiality_notes": {}, "near_miss": None})
 
 
+class TranslatingEngine(LLMEngine):
+    name = "fake-nl"
+    def complete(self, prompt):
+        assert "Dutch (nl)" in prompt
+        data = json.loads(prompt.split("```json", 1)[1].rsplit("```", 1)[0])
+        sid = data["stories"][0]["id"]
+        return json.dumps({"act": [{"story_id": sid, "headline": "Phishing {{< evil >}}", "why_it_matters": "Matters",
+                                    "relevance_refs": ["ExampleBank internal"], "severity": "high", "action": "patch",
+                                    "links": [], "translations": {"nl": {"headline": "Phishing NL",
+                                                                         "why_it_matters": "Daarom"}}}],
+                           "signal": [], "merges": [], "materiality_notes": {}, "near_miss": None})
+
+
 def _cfg(tmp_path, make_item, monkeypatch):
     root = Path(__file__).resolve().parent.parent
     shutil.copytree(root / "templates" / "profile", tmp_path, dirs_exist_ok=True)
@@ -26,6 +42,7 @@ def _cfg(tmp_path, make_item, monkeypatch):
     cfg.data = tmp_path  # data straight under tmp_path, so the assertions below stay short
     # Never write outside tmp_path, whatever the real config points at (e.g. an Obsidian vault).
     cfg.settings["markdown"]["dir"] = str(tmp_path / "markdown")
+    cfg.settings["hugo"]["content_dir"] = str(tmp_path / "blog")
     # Pin what the assertions rely on, so the tests do not depend on the contents of the real config.
     cfg.settings["markdown"].update(brief_filename="CTI Brief {date} {time}", review_filename="CTI Review {date}")
     cfg.gating.setdefault("groups", {})["organization"] = {"weight": 30, "cap": 60, "always_include": True,
@@ -192,3 +209,35 @@ def test_titles_come_from_settings(tmp_path, make_item, monkeypatch):
     assert "<title>AI Brief " in html and "<h1>AI Landscape Brief</h1>" in html and "# AI Landscape Brief" in md
     assert "Cyber Threat Intelligence" not in html
     assert pipeline.brief_titles(cfg)["review"] == "CTI Review"   # unset keys keep the default
+
+
+def test_hugo_bundle_per_language(tmp_path, make_item, monkeypatch):
+    cfg = _cfg(tmp_path, make_item, monkeypatch)
+    ENGINES["claude_code"] = TranslatingEngine
+    cfg.settings["paths"]["brief_formats"] = ["html", "hugo"]
+    cfg.settings["hugo"].update(languages=["en", "nl"], categories=["Threat Intelligence"], tags=["cti"])
+    assert pipeline.run_pipeline(cfg, deliver=False) == 0
+    bundles = list((tmp_path / "blog").iterdir())
+    assert len(bundles) == 1 and sorted(p.name for p in bundles[0].iterdir()) == ["index.en.md", "index.nl.md"]
+    en, nl = (bundles[0] / "index.en.md").read_text(), (bundles[0] / "index.nl.md").read_text()
+    front = yaml.safe_load(en.split("---\n")[1])
+    assert set(front) == {"title", "date", "draft", "categories", "tags"}
+    assert front["title"] == f"CTI Brief {bundles[0].name}" and front["categories"] == ["Threat Intelligence"]
+    assert "### Phishing { {< evil >} }" in en and "{{<" not in en
+    assert "## Actie (1)" in nl and "### Phishing NL {.sev-high}" in nl and "Daarom" in nl and "**HOOG** · patchen" in nl
+    for text in (en, nl):
+        assert "ExampleBank internal" not in text and "score" not in text and "Notes" not in text
+    assert not list((tmp_path / "markdown").glob("*.md"))           # md not in brief_formats
+
+
+def test_hugo_bundle_names_and_dry_run(tmp_path, make_item, monkeypatch):
+    first = pipeline.hugo_bundle_dir(tmp_path, "2026-10-09", "20261009_070012")
+    second = pipeline.hugo_bundle_dir(tmp_path, "2026-10-09", "20261009_143000")
+    assert first.name == "2026-10-09" and second.name == "2026-10-09-1430"
+    cfg = _cfg(tmp_path, make_item, monkeypatch)
+    cfg.settings["paths"]["brief_formats"] = ["hugo"]
+    assert pipeline.run_pipeline(cfg, dry_run=True, with_llm=True) == 0
+    assert not (tmp_path / "blog").exists()
+    cfg.settings["hugo"]["languages"] = ["en", "fr"]
+    with pytest.raises(ValueError, match="fr"):
+        pipeline.hugo_settings(cfg)

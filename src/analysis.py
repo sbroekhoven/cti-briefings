@@ -32,11 +32,26 @@ def build_input(items: list[IntelItem], gating: dict) -> tuple[dict, dict[int, I
     return {"profile": profile, "stories": stories}, by_id
 
 
-def build_prompt(prompt_file: Path, payload: dict, *, act_max: int, signal_max: int, lookback_hours: float) -> str:
+def build_prompt(prompt_file: Path, payload: dict, *, act_max: int, signal_max: int, lookback_hours: float,
+                 translations: dict[str, str] | None = None) -> str:
+    """translations: extra output languages as {code: name}, e.g. {"nl": "Dutch"} (for Hugo posts)."""
     template = prompt_file.read_text(encoding="utf-8")
     for key, val in {"{act_max}": act_max, "{signal_max}": signal_max, "{lookback_hours}": f"{lookback_hours:g}"}.items():
         template = template.replace(key, str(val))
+    if translations:
+        template += "\n\n" + translation_rule(translations)
     return f"{template}\n\nINPUT:\n```json\n{json.dumps(payload, ensure_ascii=False, indent=1)}\n```\n"
+
+
+def translation_rule(translations: dict[str, str]) -> str:
+    """Added in code rather than in prompt.md, so profiles without extra languages send the same prompt as before."""
+    names = ", ".join(f"{name} ({code})" for code, name in translations.items())
+    act = ", ".join(f'"{c}": {{"headline": "", "why_it_matters": ""}}' for c in translations)
+    sig = ", ".join(f'"{c}": {{"line": ""}}' for c in translations)
+    return (f"Translations: also write each ACT headline and why_it_matters, and each SIGNAL line, in {names}. "
+            f'Add them to each ACT entry as "translations": {{{act}}} and to each SIGNAL entry as '
+            f'"translations": {{{sig}}}. Translate faithfully with the same length limits; keep CVE ids, product, '
+            f"vendor and threat actor names unchanged.")
 
 
 def _valid_id(value, by_id) -> int | None:
@@ -51,7 +66,24 @@ def _str_list(value) -> list[str]:
     return [str(v) for v in value if v] if isinstance(value, list) else []
 
 
-def validate(result: dict, by_id: dict[int, IntelItem], *, act_max: int, max_items: int) -> dict:
+def _translations(e: dict, languages, limits: dict[str, int]) -> dict[str, dict[str, str]]:
+    """Keep only requested languages and known string fields, truncated like the English ones."""
+    raw = e.get("translations")
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for lang in languages:
+        t = raw.get(lang)
+        if isinstance(t, dict):
+            fields = {k: truncate(str(t[k]).strip(), n) if n else str(t[k]).strip()
+                      for k, n in limits.items() if isinstance(t.get(k), str) and t[k].strip()}
+            if fields:
+                out[lang] = fields
+    return out
+
+
+def validate(result: dict, by_id: dict[int, IntelItem], *, act_max: int, max_items: int,
+             languages: list[str] | tuple = ()) -> dict:
     """Enforce the rules in code, never trust the model: unknown ids, re-mentions without a
     materiality note, over-long text and over-limit counts are all handled here."""
     warnings: list[str] = []
@@ -94,6 +126,7 @@ def validate(result: dict, by_id: dict[int, IntelItem], *, act_max: int, max_ite
             "action": action if action in ACTIONS else "monitor",
             "severity": severity if severity in SEVERITIES else "medium",
             "links": links, "materiality_note": notes.get(str(sid)),
+            "translations": _translations(e, languages, {"headline": 90, "why_it_matters": 0}),
         })
 
     signal = []
@@ -109,7 +142,12 @@ def validate(result: dict, by_id: dict[int, IntelItem], *, act_max: int, max_ite
         if len(act) + len(signal) >= max_items:
             break
         used.add(sid)
-        signal.append({"story_id": sid, "item": item, "line": truncate(str(e.get("line", item.title)), 140)})
+        signal.append({"story_id": sid, "item": item, "line": truncate(str(e.get("line", item.title)), 140),
+                       "translations": _translations(e, languages, {"line": 140})})
+
+    missing = {lang: [e["story_id"] for e in act + signal if lang not in e["translations"]] for lang in languages}
+    warnings += [f"No {lang} translation for story {', '.join(map(str, ids))}; the English text is used"
+                 for lang, ids in missing.items() if ids]
 
     near = _valid_id(result.get("near_miss"), by_id)
     return {

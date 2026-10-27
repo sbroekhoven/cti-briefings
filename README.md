@@ -6,7 +6,7 @@ Modular cyber threat intelligence collector and daily brief generator. It pulls 
 - **Signal**: one-liners worth knowing.
 - **Vulnerabilities**: a table from the vulnerability feeds, built without the LLM.
 
-Output: HTML, Markdown with front matter (e.g. into an Obsidian vault), email and Microsoft Teams. A weekly review shows everything the tool saw, for tuning the gate. Run several **profiles** side by side (say a work brief and a personal one), each with its own sources, keywords, prompt and history.
+Output: HTML, Markdown with front matter (e.g. into an Obsidian vault), Hugo blog posts in English and Dutch ([README_HUGO.md](README_HUGO.md)), email and Microsoft Teams. A weekly review shows everything the tool saw, for tuning the gate. Run several **profiles** side by side (say a work brief and a personal one), each with its own sources, keywords, prompt and history.
 
 Documentation: [ARCHITECTURE.md](ARCHITECTURE.md) (how it works inside), [DEVELOPMENT.md](DEVELOPMENT.md) (working on the code), [CHANGELOG.md](CHANGELOG.md) (what changed, and upgrade steps), [integrations/hermesagent/](integrations/hermesagent/README.md) (optional: briefs into an LLM wiki).
 
@@ -121,8 +121,9 @@ Exit codes: 0 success, 1 failed, 2 brief written but a delivery channel failed.
 | File / section | What it controls |
 | --- | --- |
 | `settings.yaml` `general` | lookback window, timezone, HTTP, backups, retention |
-| `settings.yaml` `paths` | database, briefs, backups (relative to the data folder), prompt (relative to the profile), `brief_formats` (`[html, md]`) |
+| `settings.yaml` `paths` | database, briefs, backups (relative to the data folder), prompt (relative to the profile), `brief_formats` (`[html, md, hugo]`) |
 | `settings.yaml` `markdown` | Markdown folder (vault), front matter, tags, note names |
+| `settings.yaml` `hugo` | Hugo content folder, bundle name, languages, title, categories, tags ([README_HUGO.md](README_HUGO.md)) |
 | `settings.yaml` `scoring`, `limits` | score weights, quiet score (`min_score`), how many items go to the LLM and into the brief |
 | `settings.yaml` `vulnerabilities` | the vulnerability table: threshold, size, relevance filter |
 | `settings.yaml` `dedup` | title similarity, how far back history is checked |
@@ -156,6 +157,7 @@ Vulnerability feeds are noisy, so by default (`require_match: true`) a row needs
 | --- | --- | --- |
 | HTML brief | `<data>/briefs/brief_<stamp>.html` | browser version; dry runs add `_dryrun` |
 | Markdown brief | `markdown.dir`, e.g. `CTI Brief 2026-10-12 0700.md` | only on real runs, when `md` is in `paths.brief_formats` |
+| Hugo posts | `hugo.content_dir`, e.g. `2026-10-12/index.en.md` + `index.nl.md` | page bundle per brief, public subset; only on real runs, when `hugo` is in `paths.brief_formats`. See [README_HUGO.md](README_HUGO.md) |
 | Email | `delivery.email` | Outlook-friendly template (tables, inline styles) plus a plain-text part |
 | Teams | `delivery.teams` | Adaptive Card via a Workflows webhook, full width; item counts capped by `max_*_items` |
 | Review | `<data>/briefs/review_<stamp>.html` + Markdown in `markdown.dir` | from `--history` |

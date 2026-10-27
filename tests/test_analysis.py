@@ -1,4 +1,4 @@
-from src.analysis import validate
+from src.analysis import build_prompt, validate
 
 
 def _by_id(make_item):
@@ -41,3 +41,26 @@ def test_vulnerability_items_never_signal(make_item):
     out = validate({"act": [], "signal": [{"story_id": 1, "line": "vuln"}, {"story_id": 2, "line": "news"}]},
                    by_id, act_max=1, max_items=5)
     assert [s["story_id"] for s in out["signal"]] == [2]
+
+
+def test_translation_rule_only_when_asked(tmp_path):
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Pick stories.")
+    plain = build_prompt(prompt, {"stories": []}, act_max=1, signal_max=1, lookback_hours=24)
+    assert "translations" not in plain
+    nl = build_prompt(prompt, {"stories": []}, act_max=1, signal_max=1, lookback_hours=24, translations={"nl": "Dutch"})
+    assert "Dutch (nl)" in nl and '"nl": {"headline": "", "why_it_matters": ""}' in nl
+
+
+def test_validate_keeps_requested_translations(make_item):
+    by_id = _by_id(make_item)
+    result = {"act": [{"story_id": 1, "headline": "H", "translations": {
+                  "nl": {"headline": "x" * 200, "why_it_matters": "Waarom", "bogus": "?"}, "de": {"headline": "D"}}}],
+              "signal": [{"story_id": 2, "line": "L", "translations": {"nl": {"line": 5}}}]}
+    out = validate(result, by_id, act_max=3, max_items=5, languages=["nl"])
+    assert set(out["act"][0]["translations"]) == {"nl"}
+    nl = out["act"][0]["translations"]["nl"]
+    assert len(nl["headline"]) <= 90 and nl["why_it_matters"] == "Waarom" and "bogus" not in nl
+    assert out["signal"][0]["translations"] == {}                     # not a string: dropped
+    assert any("No nl translation for story 2" in w for w in out["warnings"])
+    assert validate(result, by_id, act_max=3, max_items=5)["act"][0]["translations"] == {}

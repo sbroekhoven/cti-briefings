@@ -1,0 +1,51 @@
+{# Public Hugo post, one per language (index.<lang>.md in a page bundle). Rendered from render.localize(), so
+   act/signal text is already in `lang` and `t` holds the fixed labels. Internals (scores, relevance refs,
+   near miss, notes, failed sources) are left out on purpose. Act headings carry a severity class
+   ({.sev-high}, Hugo heading attributes) so a site can style them. #}
+{% set props = {
+  "title": hugo.title,
+  "date": generated_rfc3339,
+  "draft": hugo.draft,
+  "categories": hugo.categories,
+  "tags": hugo.tags,
+} %}
+---
+{{ props|yaml }}---
+
+{{ t.intro.format(reviewed=stats.reviewed, sources=stats.sources_ok, hours=lookback) }}
+
+## {{ t.act }} ({{ act|length }})
+{% for a in act %}
+
+### {{ a.headline|hugosafe }} {.sev-{{ a.severity }}}
+
+**{{ t.severity[a.severity]|upper }}** · {{ t.action[a.action] }}{% for c in a.cves %} · `{{ c|hugosafe }}`{% endfor %}
+
+
+{{ a.why_it_matters|hugosafe }}
+
+{{ a.item.source_name|hugosafe }}{% if a.item.also_reported_by %} ({{ t.also }}: {{ a.item.also_reported_by|join(', ')|hugosafe }}){% endif %} · {% for l in a.links %}[{{ t.source if loop.first else t.link ~ ' ' ~ loop.index }}]({{ l|hugosafe }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+{% else %}
+
+_{{ t.no_act }}_
+{% endfor %}
+
+
+## {{ t.signal }} ({{ signal|length }})
+
+{% for s in signal %}
+- {{ s.line|hugosafe }} ([{{ s.item.source_name|mdlink|hugosafe }}]({{ s.item.link|hugosafe }}))
+{% else %}
+_{{ t.no_signal }}_
+{% endfor %}
+{% if vulns %}
+
+## {{ t.vulns }} ({{ vulns|length }})
+
+| {{ t.cols|join(' | ') }} |
+|---|---|---|--:|--:|---|---|
+{% for v in vulns %}
+| [{{ v.cve or t.link }}]({{ v.link|hugosafe }}) | {{ (v.product or '–')|mdcell|hugosafe }} | {{ v.description|mdcell|hugosafe }} | {{ v.cvss if v.cvss is not none else '–' }} | {{ v.epss if v.epss is not none else '–' }} | {{ ('**' ~ t.exploited ~ '**') if v.exploited else '' }}{{ (', ' ~ t.ransomware) if v.ransomware else '' }}{{ (', ' ~ t.due ~ ' ' ~ v.due) if v.due else '' }} | {{ v.source|mdcell|hugosafe }} |
+{% endfor %}
+{% endif %}
